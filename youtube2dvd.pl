@@ -106,6 +106,147 @@ my $logger = Log::Log4perl->get_logger('SCREEN');
 $logger->debug( "Logger initialized at " . $LEVEL . " level" );
 
 ################################################################################
+# Convert files from one format to another
+################################################################################
+sub convert {
+    my ( $basename, $task ) = @_;
+    my $cmd;
+
+    if ( -f $basename . ".$task" || -d $basename . ".$task" ) {
+        $logger->debug(
+            "File or directory" . $basename . ".$task already exists." );
+        return 0;
+    }
+
+    if ( $task =~ m/^mpg$/ ) {
+        my $nullaudio = "";
+        $cmd =
+            "/usr/bin/ffprobe -v info -select_streams a \""
+          . $basename
+          . "\" 2>&1 | /usr/bin/grep '^    Stream #' |"
+          . " /usr/bin/grep ': Audio: ' > /dev/null";
+        $logger->error_warn(
+            "Checking for audio stream in $basename with: \"$cmd\"");
+        my $rc = system($cmd);
+        if ($rc) {
+            warn(   "$basename does not have an audio track,"
+                  . " setting it to have one..." );
+            $nullaudio = " -f lavfi -i aevalsrc=0 -shortest"
+              . " -c:v copy -c:a aac -strict experimental ";
+        } ## end if ($rc)
+        $cmd =
+            " /usr/bin/ffmpeg -y -i \""
+          . $basename . "\" "
+          . $nullaudio
+          . " -target ntsc-dvd -q:a 0 -q:v 0 \""
+          . $basename
+          . ".$task" . "\"";
+    } elsif ( $task =~ m/^ac3$/ ) {
+        $cmd =
+            " /usr/bin/ffmpeg -y -i \""
+          . $basename . ".mpg"
+          . "\" -acodec copy -vn \""
+          . $basename
+          . ".$task" . "\"";
+    } elsif ( $task =~ m/^m2v$/ ) {
+        $cmd =
+            " /usr/bin/ffmpeg -y -i \""
+          . $basename . ".mpg"
+          . "\" -vcodec copy -an \""
+          . $basename
+          . ".$task" . "\"";
+    } elsif ( $task =~ m/^wav$/ ) {
+        $cmd =
+            " /usr/bin/mplayer -noautosub -nolirc -benchmark "
+          . "-vc null -vo null "
+          . "-ao pcm:waveheader:fast:file=\""
+          . $basename
+          . ".$task" . "\" \""
+          . $basename . ".ac3" . "\"";
+    } elsif ( $task =~ m/^pcm$/ ) {
+        $cmd =
+            "if [ ! -f \""
+          . $basename
+          . ".$task"
+          . "\" ]; then "
+          . " /usr/bin/cp -a \""
+          . $basename . ".wav" . "\" \""
+          . $basename
+          . ".$task" . "\"" . "; fi "
+          . " && /usr/bin/normalize --no-progress -n \""
+          . $basename
+          . ".$task"
+          . "\"  2>&1 | "
+          . "/usr/bin/grep ' has zero power, ignoring...' ; "
+          . "if [ \$? -eq 0 ]; "
+          . "then echo \"skipping file "
+          . $basename
+          . ".$task" . "\"; "
+          . "else echo \"normalizing file "
+          . $basename
+          . ".$task"
+          . "\" && "
+          . "/usr/bin/normalize -m \""
+          . $basename
+          . ".$task" . "\" ; " . "fi";
+    } elsif ( $task =~ m/^mpa$/ ) {
+        $cmd =
+            " /usr/bin/ffmpeg -y -i \""
+          . $basename . ".pcm"
+          . "\" -f ac3 -vn \""
+          . $basename
+          . ".$task" . "\"";
+    } elsif ( $task =~ m/^mplex\.mpg$/ ) {
+        $cmd =
+            " /usr/bin/mplex -f 8 -o \""
+          . $basename
+          . ".$task\" \""
+          . $basename . ".m2v" . "\" \""
+          . $basename . ".mpa" . "\"";
+    } elsif ( $task =~ m/^dvda$/ ) {
+        $cmd =
+            "if [ -d \""
+          . $basename . "."
+          . $task
+          . "\" ]; then /usr/bin/rm -r "
+          . $basename . "."
+          . $task
+          . "; fi && /usr/bin/mkdir "
+          . $basename . "."
+          . $task . " && "
+          . "/usr/bin/dvdauthor -x \""
+          . $basename
+          . "\" -o "
+          . $basename . "."
+          . $task;
+    } elsif ( $task =~ m/^iso$/ ) {
+        $cmd =
+            "if [ -f \""
+          . $basename . "."
+          . $task
+          . "\" ]; then /usr/bin/rm "
+          . $basename . "."
+          . $task
+          . "; fi && "
+          . "/usr/bin/find "
+          . $basename
+          . " -exec /usr/bin/touch"
+          . " -a -m -r \""
+          . $tempdir
+          . "\" {} \\\; && "
+          . "/usr/bin/genisoimage -quiet -dvd-video -o "
+          . $basename . "."
+          . $task . " "
+          . $basename;
+    } else {
+        die "Task \"$task\" is unkown!";
+    }
+
+    runcmd($cmd);
+
+} ## end sub convert
+
+################################################################################
 # Validate external command
 ################################################################################
 sub getcmd {
@@ -341,141 +482,4 @@ close(DVDAXML);
 convert( $dvdaxml,  "dvda" );
 convert( $dvdaxmld, "iso" );
 
-sub convert {
-    my ( $basename, $task ) = @_;
-    my $cmd;
-
-    if ( -f $basename . ".$task" || -d $basename . ".$task" ) {
-        $logger->debug(
-            "File or directory" . $basename . ".$task already exists." );
-        return 0;
-    }
-
-    if ( $task =~ m/^mpg$/ ) {
-        my $nullaudio = "";
-        $cmd =
-            "/usr/bin/ffprobe -v info -select_streams a \""
-          . $basename
-          . "\" 2>&1 | /usr/bin/grep '^    Stream #' |"
-          . " /usr/bin/grep ': Audio: ' > /dev/null";
-        $logger->error_warn(
-            "Checking for audio stream in $basename with: \"$cmd\"");
-        my $rc = system($cmd);
-        if ($rc) {
-            warn(   "$basename does not have an audio track,"
-                  . " setting it to have one..." );
-            $nullaudio = " -f lavfi -i aevalsrc=0 -shortest"
-              . " -c:v copy -c:a aac -strict experimental ";
-        } ## end if ($rc)
-        $cmd =
-            " /usr/bin/ffmpeg -y -i \""
-          . $basename . "\" "
-          . $nullaudio
-          . " -target ntsc-dvd -q:a 0 -q:v 0 \""
-          . $basename
-          . ".$task" . "\"";
-    } elsif ( $task =~ m/^ac3$/ ) {
-        $cmd =
-            " /usr/bin/ffmpeg -y -i \""
-          . $basename . ".mpg"
-          . "\" -acodec copy -vn \""
-          . $basename
-          . ".$task" . "\"";
-    } elsif ( $task =~ m/^m2v$/ ) {
-        $cmd =
-            " /usr/bin/ffmpeg -y -i \""
-          . $basename . ".mpg"
-          . "\" -vcodec copy -an \""
-          . $basename
-          . ".$task" . "\"";
-    } elsif ( $task =~ m/^wav$/ ) {
-        $cmd =
-            " /usr/bin/mplayer -noautosub -nolirc -benchmark "
-          . "-vc null -vo null "
-          . "-ao pcm:waveheader:fast:file=\""
-          . $basename
-          . ".$task" . "\" \""
-          . $basename . ".ac3" . "\"";
-    } elsif ( $task =~ m/^pcm$/ ) {
-        $cmd =
-            "if [ ! -f \""
-          . $basename
-          . ".$task"
-          . "\" ]; then "
-          . " /usr/bin/cp -a \""
-          . $basename . ".wav" . "\" \""
-          . $basename
-          . ".$task" . "\"" . "; fi "
-          . " && /usr/bin/normalize --no-progress -n \""
-          . $basename
-          . ".$task"
-          . "\"  2>&1 | "
-          . "/usr/bin/grep ' has zero power, ignoring...' ; "
-          . "if [ \$? -eq 0 ]; "
-          . "then echo \"skipping file "
-          . $basename
-          . ".$task" . "\"; "
-          . "else echo \"normalizing file "
-          . $basename
-          . ".$task"
-          . "\" && "
-          . "/usr/bin/normalize -m \""
-          . $basename
-          . ".$task" . "\" ; " . "fi";
-    } elsif ( $task =~ m/^mpa$/ ) {
-        $cmd =
-            " /usr/bin/ffmpeg -y -i \""
-          . $basename . ".pcm"
-          . "\" -f ac3 -vn \""
-          . $basename
-          . ".$task" . "\"";
-    } elsif ( $task =~ m/^mplex\.mpg$/ ) {
-        $cmd =
-            " /usr/bin/mplex -f 8 -o \""
-          . $basename
-          . ".$task\" \""
-          . $basename . ".m2v" . "\" \""
-          . $basename . ".mpa" . "\"";
-    } elsif ( $task =~ m/^dvda$/ ) {
-        $cmd =
-            "if [ -d \""
-          . $basename . "."
-          . $task
-          . "\" ]; then /usr/bin/rm -r "
-          . $basename . "."
-          . $task
-          . "; fi && /usr/bin/mkdir "
-          . $basename . "."
-          . $task . " && "
-          . "/usr/bin/dvdauthor -x \""
-          . $basename
-          . "\" -o "
-          . $basename . "."
-          . $task;
-    } elsif ( $task =~ m/^iso$/ ) {
-        $cmd =
-            "if [ -f \""
-          . $basename . "."
-          . $task
-          . "\" ]; then /usr/bin/rm "
-          . $basename . "."
-          . $task
-          . "; fi && "
-          . "/usr/bin/find "
-          . $basename
-          . " -exec /usr/bin/touch"
-          . " -a -m -r \""
-          . $tempdir
-          . "\" {} \\\; && "
-          . "/usr/bin/genisoimage -quiet -dvd-video -o "
-          . $basename . "."
-          . $task . " "
-          . $basename;
-    } else {
-        die "Task \"$task\" is unkown!";
-    }
-
-    runcmd($cmd);
-
-} ## end sub convert
-
+1;
