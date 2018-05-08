@@ -1,18 +1,18 @@
 #! /usr/bin/perl -wT
 
-use diagnostics;
-use strict;
-use warnings;
-use Data::Dumper;
-use Digest::MD5 qw[md5_hex];
-use File::Temp;
-use File::Which;
-use Getopt::Long;
-use IPC::Cmd qw[can_run];
-use IPC::Run3;
-use JSON::Path;
-use Log::Log4perl;
-use Regexp::Common qw[URI];
+use diagnostics;                 # Produce verbose warning diagnostics
+use strict;                      # Pragma to restrict unsafe constructs
+use warnings;                    # Pragma to give control over warnings
+use Data::Dumper qw[Dumper];     # Stringified perl data structures
+use Digest::MD5 qw[md5_hex];     # Interface to the MD5 Algorithm
+use File::Temp qw[tempdir];      # Return name of a temporary file safely
+use File::Which qw[which];       # Implementation of the which utility as an API
+use Getopt::Long qw[GetOptions]; # Extended processing of command line options
+use IPC::Cmd qw[can_run];        # Finding and running system commands made easy
+use IPC::Run3 qw[run3];          # Run a subprocess with input/ouput redirection
+use JSON::Path qw[jpath1];       # Search nested ref structures using JSONPath
+use Log::Log4perl;               # Log4j implementation for Perl
+use Regexp::Common qw[URI];      # Commonly requested regular expressions
 
 my ( $optdebug, $optquiet, $opturl, $optverbose );
 
@@ -98,11 +98,9 @@ sub getcmd {
     return $full_path;
 } ## end sub getcmd
 
-my $tempdir = File::Temp->newdir( DIR => "." );
-$tempdir->unlink_on_destroy(0);
-my $tempdirname = $tempdir->dirname;
+my $tempdir = tempdir( DIR => "." );
 
-$logger->debug( "Temporary directory: " . $tempdirname );
+$logger->debug( "Temporary directory: " . $tempdir );
 
 sub runcmd {
     my (@cmd) = @_;
@@ -123,34 +121,34 @@ sub runcmd {
 my $ytdlcmd =
     getcmd("youtube-dl")
   . " -f webm/mp4 --prefer-free-formats --write-description --write-info-json --write-annotations --write-thumbnail --write-all-thumbnails -o \'"
-  . $tempdirname
+  . $tempdir
   . "/\%(playlist_index)s - \%(title)s.\%(ext)s\' \""
   . $opturl . "\"";
 runcmd($ytdlcmd);
 
 my @jsonfiles;
-unless ( opendir( TEMPDIR, $tempdirname ) ) {
-    $logger->error_die("Cannot open $tempdirname: $!");
+unless ( opendir( TEMPDIR, $tempdir ) ) {
+    $logger->error_die("Cannot open $tempdir: $!");
 }
 while ( readdir(TEMPDIR) ) {
-    $logger->trace("$tempdirname/$_");
+    $logger->trace("$tempdir/$_");
     if ( $_ =~ m/\.info\.json$/ ) {
         push( @jsonfiles, $_ );
     }
 } ## end while ( readdir(TEMPDIR) )
 closedir(TEMPDIR);
 
-my $manifest = $tempdirname . "/manifest.txt";
+my $manifest = $tempdir . "/manifest.txt";
 unless ( open( MANIFEST, ">$manifest" ) ) {
     die "Cannot open manifest file $manifest for writing: $!\n";
 }
 
 foreach ( sort(@jsonfiles) ) {
-    my $basename = "$tempdirname/$_";
+    my $basename = "$tempdir/$_";
     $basename =~ s/\.info\.json$//g;
     $basename =~ /\A(.*)\z/s
       or $logger->error_die( $basename . " is tainted: $!" ); $basename = $1;
-    my $newfilename = $tempdirname . "/" . md5_hex($basename);
+    my $newfilename = $tempdir . "/" . md5_hex($basename);
     my $jsonname    = $basename . ".info.json";
     $logger->trace($jsonname);
     unless ( open( JSONFILE, $jsonname ) ) {
@@ -159,9 +157,8 @@ foreach ( sort(@jsonfiles) ) {
     my $data = <JSONFILE>;
     close(JSONFILE);
     $logger->trace( Dumper $data );
-    my $jpath;
-    $jpath = JSON::Path->new('$._filename');
-    my $_filename = $jpath->value($data);
+    my $_filename = jpath1( $data, '$._filename' );
+    $logger->trace( Dumper $_filename );
     runcmd( "/usr/bin/cp -a \"" . $_filename . "\" \"" . $newfilename . "\"" );
     $logger->trace( Dumper $newfilename );
     my $jpgfile = $basename . ".jpg";
@@ -178,7 +175,7 @@ foreach ( sort(@jsonfiles) ) {
 
 close(MANIFEST);
 
-my $dvdaxml  = $tempdirname . "/dvdauthor.xml";
+my $dvdaxml  = $tempdir . "/dvdauthor.xml";
 my $dvdaxmld = $dvdaxml . ".dvda";
 
 unless ( open( DVDAXML, ">$dvdaxml" ) ) {
@@ -386,7 +383,7 @@ sub convert {
           . $basename
           . " -exec /usr/bin/touch"
           . " -a -m -r \""
-          . $tempdirname
+          . $tempdir
           . "\" {} \\\; && "
           . "/usr/bin/genisoimage -quiet -dvd-video -o "
           . $basename . "."
