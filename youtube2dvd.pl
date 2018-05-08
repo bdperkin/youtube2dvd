@@ -110,21 +110,22 @@ $logger->debug( "Logger initialized at " . $LEVEL . " level" );
 ################################################################################
 sub convert {
     my ( $basename, $task ) = @_;
+    my $tempdir = $main::tempdir;
     my $cmd;
 
     if ( -f $basename . ".$task" || -d $basename . ".$task" ) {
         $logger->debug(
-            "File or directory" . $basename . ".$task already exists." );
+            "File or directory" . $basename . ".$task already exists" );
         return 0;
     }
 
     if ( $task =~ m/^mpg$/ ) {
         my $nullaudio = "";
         $cmd =
-            "/usr/bin/ffprobe -v info -select_streams a \""
+            "ffprobe -v info -select_streams a \""
           . $basename
-          . "\" 2>&1 | /usr/bin/grep '^    Stream #' |"
-          . " /usr/bin/grep ': Audio: ' > /dev/null";
+          . "\" 2>&1 | grep '^    Stream #' |"
+          . " grep ': Audio: ' > /dev/null";
         $logger->error_warn(
             "Checking for audio stream in $basename with: \"$cmd\"");
         my $rc = system($cmd);
@@ -135,7 +136,7 @@ sub convert {
               . " -c:v copy -c:a aac -strict experimental ";
         } ## end if ($rc)
         $cmd =
-            " /usr/bin/ffmpeg -y -i \""
+            " ffmpeg -y -i \""
           . $basename . "\" "
           . $nullaudio
           . " -target ntsc-dvd -q:a 0 -q:v 0 \""
@@ -143,21 +144,21 @@ sub convert {
           . ".$task" . "\"";
     } elsif ( $task =~ m/^ac3$/ ) {
         $cmd =
-            " /usr/bin/ffmpeg -y -i \""
+            " ffmpeg -y -i \""
           . $basename . ".mpg"
           . "\" -acodec copy -vn \""
           . $basename
           . ".$task" . "\"";
     } elsif ( $task =~ m/^m2v$/ ) {
         $cmd =
-            " /usr/bin/ffmpeg -y -i \""
+            " ffmpeg -y -i \""
           . $basename . ".mpg"
           . "\" -vcodec copy -an \""
           . $basename
           . ".$task" . "\"";
     } elsif ( $task =~ m/^wav$/ ) {
         $cmd =
-            " /usr/bin/mplayer -noautosub -nolirc -benchmark "
+            " mplayer -noautosub -nolirc -benchmark "
           . "-vc null -vo null "
           . "-ao pcm:waveheader:fast:file=\""
           . $basename
@@ -169,15 +170,15 @@ sub convert {
           . $basename
           . ".$task"
           . "\" ]; then "
-          . " /usr/bin/cp -a \""
+          . " cp -a \""
           . $basename . ".wav" . "\" \""
           . $basename
           . ".$task" . "\"" . "; fi "
-          . " && /usr/bin/normalize --no-progress -n \""
+          . " && normalize --no-progress -n \""
           . $basename
           . ".$task"
           . "\"  2>&1 | "
-          . "/usr/bin/grep ' has zero power, ignoring...' ; "
+          . "grep ' has zero power, ignoring...' ; "
           . "if [ \$? -eq 0 ]; "
           . "then echo \"skipping file "
           . $basename
@@ -186,19 +187,19 @@ sub convert {
           . $basename
           . ".$task"
           . "\" && "
-          . "/usr/bin/normalize -m \""
+          . "normalize -m \""
           . $basename
           . ".$task" . "\" ; " . "fi";
     } elsif ( $task =~ m/^mpa$/ ) {
         $cmd =
-            " /usr/bin/ffmpeg -y -i \""
+            " ffmpeg -y -i \""
           . $basename . ".pcm"
           . "\" -f ac3 -vn \""
           . $basename
           . ".$task" . "\"";
     } elsif ( $task =~ m/^mplex\.mpg$/ ) {
         $cmd =
-            " /usr/bin/mplex -f 8 -o \""
+            " mplex -f 8 -o \""
           . $basename
           . ".$task\" \""
           . $basename . ".m2v" . "\" \""
@@ -208,13 +209,13 @@ sub convert {
             "if [ -d \""
           . $basename . "."
           . $task
-          . "\" ]; then /usr/bin/rm -r "
+          . "\" ]; then rm -r "
           . $basename . "."
           . $task
-          . "; fi && /usr/bin/mkdir "
+          . "; fi && mkdir "
           . $basename . "."
           . $task . " && "
-          . "/usr/bin/dvdauthor -x \""
+          . "dvdauthor -x \""
           . $basename
           . "\" -o "
           . $basename . "."
@@ -224,17 +225,17 @@ sub convert {
             "if [ -f \""
           . $basename . "."
           . $task
-          . "\" ]; then /usr/bin/rm "
+          . "\" ]; then rm "
           . $basename . "."
           . $task
           . "; fi && "
-          . "/usr/bin/find "
+          . "find "
           . $basename
-          . " -exec /usr/bin/touch"
+          . " -exec touch"
           . " -a -m -r \""
           . $tempdir
           . "\" {} \\\; && "
-          . "/usr/bin/genisoimage -quiet -dvd-video -o "
+          . "genisoimage -quiet -dvd-video -o "
           . $basename . "."
           . $task . " "
           . $basename;
@@ -308,10 +309,10 @@ sub validurl {
     $logger->trace( "Validating URL \"" . $url . "\"" );
     if ( $url =~ $regexp ) {
         $url = $1;
-        $logger->trace( "URL \"" . $url . "\" is valid." );
+        $logger->trace( "URL \"" . $url . "\" is valid" );
         return $url;
     }
-    $logger->error( "URL \"" . $url . "\" is not valid." );
+    $logger->error( "URL \"" . $url . "\" is not valid" );
     return 0;
 } ## end sub validurl
 
@@ -323,10 +324,17 @@ unless ($opturl) {
 }
 
 if ( validurl($opturl) ) {
-    $opturl =~ /\A(.*)\z/s
-      or $logger->error_die( $opturl . " is tainted: $!" ); $opturl = $1;
-} else {
-    $logger->error_die("URL is not valid: $!");
+    if ( $opturl =~ /\A(.*)\z/s ) {
+	$opturl = $1;
+	$logger->trace( "URL \"" . $opturl . "\" is not tainted" );
+    } else {
+	$logger->error_die( "URL \"" . $opturl . "\" is tainted: $!" );
+    }
+    if ( $opturl =~ m/^http(s)?:\/\/(www\.)?youtube\.com\// ) {
+	$logger->debug("Using URL \"" . $opturl . "\"" );
+    } else {
+	$logger->error_die("\"" . $opturl . "\" is not a valid youtube URL: $!");
+    }
 }
 
 my @extcmds = (
@@ -382,7 +390,7 @@ foreach ( sort(@jsonfiles) ) {
     $logger->trace( Dumper $data );
     my $_filename = jpath1( $data, '$._filename' );
     $logger->trace( Dumper $_filename );
-    runcmd( "/usr/bin/cp -a \"" . $_filename . "\" \"" . $newfilename . "\"" );
+    runcmd( "cp -a \"" . $_filename . "\" \"" . $newfilename . "\"" );
     $logger->trace( Dumper $newfilename );
     my $jpgfile = $basename . ".jpg";
     $logger->trace( Dumper $jpgfile );
