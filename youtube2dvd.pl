@@ -1,5 +1,27 @@
 #! /usr/bin/perl -wT
+#
+# youtube2dvd.pl - youtube.com video downloader and DVD authoring tool.
+# Copyright (C) 2018-2018  Brandon Perkins <bperkins@redhat.com>
+#
+# This program is free software; you can redistribute it and/or
+# modify it under the terms of the GNU General Public License
+# as published by the Free Software Foundation; either version 2
+# of the License, or (at your option) any later version.
+#
+# This program is distributed in the hope that it will be useful,
+# but WITHOUT ANY WARRANTY; without even the implied warranty of
+# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+# GNU General Public License for more details.
+#
+# You should have received a copy of the GNU General Public License
+# along with this program; if not, write to the Free Software
+# Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301,
+# USA.
+#
 
+################################################################################
+# Import some semantics into the current package from the named modules
+################################################################################
 use diagnostics;                 # Produce verbose warning diagnostics
 use strict;                      # Pragma to restrict unsafe constructs
 use warnings;                    # Pragma to give control over warnings
@@ -14,6 +36,28 @@ use JSON::Path qw[jpath1];       # Search nested ref structures using JSONPath
 use Log::Log4perl;               # Log4j implementation for Perl
 use Regexp::Common qw[URI];      # Commonly requested regular expressions
 
+################################################################################
+# Declare constants
+################################################################################
+binmode STDOUT, ":utf8";    # Out/Err/Input UTF-8 using the :utf8
+binmode STDERR, ":utf8";    # out/err/input layer.  This ensures that the
+binmode STDIN,  ":utf8";    # out/err/input is completelyUTF-8, and removes any
+                            # debug warnings.
+$ENV{PATH} = "/usr/bin";
+
+################################################################################
+# Specify module configuration options to be enabled
+################################################################################
+# Allow single-character options to be bundled. To distinguish bundles from long
+# option names, long options must be introduced with '--' and bundles with '-'.
+# Do not allow '+' to start options.
+Getopt::Long::Configure(qw(bundling no_getopt_compat));
+
+################################################################################
+# Parse command line options.  This function adheres to the POSIX syntax for CLI
+# options, with GNU extensions.
+################################################################################
+# Initialize GetOptions variables
 my ( $optdebug, $optquiet, $opturl, $optverbose );
 
 GetOptions(
@@ -26,9 +70,13 @@ GetOptions(
     "verbose" => \$optverbose,
 );
 
-$ENV{PATH} = "/usr/bin";
+################################################################################
+# Set output level
+################################################################################
+# If multiple outputs are specified, the most verbose will be used.
 $| = 0;
 my $LEVEL = "INFO";
+
 if ($optquiet) {
     $|     = 0;
     $LEVEL = "WARN";
@@ -42,6 +90,9 @@ if ($optdebug) {
     $LEVEL = "TRACE";
 }
 
+################################################################################
+# Configure and initialize logging
+################################################################################
 my %logconf = (
     "log4perl.category" => "$LEVEL, SCREEN",
     "log4perl.appender.SCREEN" =>
@@ -52,23 +103,31 @@ my %logconf = (
 
 Log::Log4perl::init( \%logconf );
 my $logger = Log::Log4perl->get_logger('SCREEN');
+$logger->debug( "Logger initialized at " . $LEVEL . " level" );
 
+################################################################################
+# Validate URL
+################################################################################
+sub validurl {
+    my ($url) = @_;
+    my $regexp = qr($RE{URI}{HTTP}{-scheme=>qr/https?/}{-keep});
+
+    $logger->trace( "Validating URL: \"" . $url . "\"" );
+    if ( $url =~ $regexp ) {
+        $url = $1;
+	$logger->trace( "URL \"" . $url . "\" is valid." );
+        return $url;
+    }
+    $logger->error( "URL \"" . $url . "\" is not valid." );
+    return 0;
+} ## end sub validurl
+
+################################################################################
+# Main function
+################################################################################
 unless ($opturl) {
     $logger->error_die("URL not provided: $!");
 }
-
-sub validurl {
-    my ($url) = @_;
-
-    my $regexp = qr($RE{URI}{HTTP}{-scheme=>qr/https?/}{-keep});
-
-    if ( $url =~ $regexp ) {
-        $url = $1;
-        return $url;
-    }
-
-    return 0;
-} ## end sub validurl
 
 if ( validurl($opturl) ) {
     $opturl =~ /\A(.*)\z/s
