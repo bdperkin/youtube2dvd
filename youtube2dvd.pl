@@ -106,16 +106,38 @@ my $logger = Log::Log4perl->get_logger('SCREEN');
 $logger->debug( "Logger initialized at " . $LEVEL . " level" );
 
 ################################################################################
+# Validate that command exists
+################################################################################
+sub getcmd {
+    my ($extcmd) = @_;
+
+    $logger->trace( "Checking if command \"" . $extcmd . "\" exists" );
+    my $extcmdpath = which($extcmd);
+    unless ($extcmdpath) {
+        $logger->error_die( $extcmd . " is not installed: $!" );
+    }
+
+    $logger->trace( "Checking if command \"" . $extcmdpath . "\" can run" );
+    my $full_path = can_run($extcmdpath);
+    unless ($full_path) {
+        $logger->error_die( $extcmdpath . " cannot be run: $!" );
+    }
+
+    $logger->trace( "\"" . $extcmd . "\" found at \"" . $full_path . "\"" );
+    return $full_path;
+} ## end sub getcmd
+
+################################################################################
 # Validate URL
 ################################################################################
 sub validurl {
     my ($url) = @_;
     my $regexp = qr($RE{URI}{HTTP}{-scheme=>qr/https?/}{-keep});
 
-    $logger->trace( "Validating URL: \"" . $url . "\"" );
+    $logger->trace( "Validating URL \"" . $url . "\"" );
     if ( $url =~ $regexp ) {
         $url = $1;
-	$logger->trace( "URL \"" . $url . "\" is valid." );
+        $logger->trace( "URL \"" . $url . "\" is valid." );
         return $url;
     }
     $logger->error( "URL \"" . $url . "\" is not valid." );
@@ -140,22 +162,9 @@ my @extcmds = (
     "youtube-dl", "ffprobe", "grep", "ffmpeg", "mplayer", "cp", "normalize",
     "mplex", "rm", "mkdir", "dvdauthor", "find", "touch", "genisoimage"
 );
-my %paths;
 foreach my $extcmd (@extcmds) {
     getcmd($extcmd);
 }
-
-sub getcmd {
-    my ($extcmd) = @_;
-    $paths{$extcmd} = which($extcmd);
-    unless ( $paths{$extcmd} ) {
-        $logger->error_die( $extcmd . " is not installed: $!" );
-    }
-    my $full_path = can_run( $paths{$extcmd} )
-      or $logger->error_die( $paths{$extcmd} . " cannot be run: $!" );
-    $logger->debug( $extcmd . " found at " . $full_path );
-    return $full_path;
-} ## end sub getcmd
 
 my $tempdir = tempdir( DIR => "." );
 
