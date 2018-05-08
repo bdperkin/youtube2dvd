@@ -106,7 +106,7 @@ my $logger = Log::Log4perl->get_logger('SCREEN');
 $logger->debug( "Logger initialized at " . $LEVEL . " level" );
 
 ################################################################################
-# Validate that command exists
+# Validate external command
 ################################################################################
 sub getcmd {
     my ($extcmd) = @_;
@@ -126,6 +126,36 @@ sub getcmd {
     $logger->trace( "\"" . $extcmd . "\" found at \"" . $full_path . "\"" );
     return $full_path;
 } ## end sub getcmd
+
+################################################################################
+# Execute external command
+################################################################################
+sub runcmd {
+    my (@cmd) = @_;
+    my ( $in, $out, $err );
+
+    $logger->info( "Running command: " . Dumper(@cmd) );
+    run3( @cmd, \$in, \$out, \$err );
+    my $result = $?;
+    if ($out) {
+        $logger->trace( "STDOUT:\n" . $out );
+    }
+    if ($err) {
+        $logger->debug( "STDERR:\n" . $err );
+    }
+    if ($result) {
+        $logger->warn($out);
+        $logger->error($err);
+        $logger->error_die( "Return code: " . $result );
+    }
+    if ($out) {
+        $logger->trace( "Returning utput from command:\n" . $out );
+        return $out;
+    } else {
+        $logger->trace("Returning empty output from command");
+        return "";
+    }
+} ## end sub runcmd
 
 ################################################################################
 # Validate URL
@@ -169,22 +199,6 @@ foreach my $extcmd (@extcmds) {
 my $tempdir = tempdir( DIR => "." );
 
 $logger->debug( "Temporary directory: " . $tempdir );
-
-sub runcmd {
-    my (@cmd) = @_;
-    my ( $in, $out, $err );
-    $logger->trace( "Running command: " . Dumper(@cmd) );
-    my $result = run3( @cmd, \$in, \$out, \$err );
-    if ($out) {
-        $logger->info($out);
-    }
-    if ($err) {
-        $logger->error($err);
-    }
-    if ( $result != 1 ) {
-        $logger->error_warn( "Return code: " . $result );
-    }
-} ## end sub runcmd
 
 my $ytdlcmd =
     getcmd("youtube-dl")
