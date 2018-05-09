@@ -113,19 +113,23 @@ sub convert {
     my $tempdir = $main::tempdir;
     my $cmd;
 
-    if ( -f $basename . ".$task" || -d $basename . ".$task" ) {
+    if ( -f $basename . "." . $task || -d $basename . "." . $task ) {
         $logger->debug(
-            "File or directory" . $basename . ".$task already exists" );
+            "File or directory" . $basename . "." . $task . " already exists" );
         return 0;
     }
 
     if ( $task =~ m/^mpg$/ ) {
         my $nullaudio = "";
         $cmd =
-            "ffprobe -v info -select_streams a \""
+            getcmd("ffprobe")
+          . " -v info -select_streams a \""
           . $basename
-          . "\" 2>&1 | grep '^    Stream #' |"
-          . " grep ': Audio: ' > /dev/null";
+          . "\" 2>&1 | "
+          . getcmd("grep")
+          . " '^    Stream #' | "
+          . getcmd("grep")
+          . " ': Audio: ' > /dev/null";
         $logger->trace("Checking for audio stream in $basename with: \"$cmd\"");
         my $rc = system($cmd);
         if ($rc) {
@@ -135,86 +139,105 @@ sub convert {
               . " -c:v copy -c:a aac -strict experimental ";
         } ## end if ($rc)
         $cmd =
-            " ffmpeg -y -i \""
+            getcmd("ffmpeg")
+          . " -y -i \""
           . $basename . "\" "
           . $nullaudio
-          . " -target ntsc-dvd -q:a 0 -q:v 0 \""
-          . $basename
-          . ".$task" . "\"";
+          . "-target ntsc-dvd -q:a 0 -q:v 0 \""
+          . $basename . "."
+          . $task . "\"";
     } elsif ( $task =~ m/^ac3$/ ) {
         $cmd =
-            " ffmpeg -y -i \""
+            getcmd("ffmpeg")
+          . " -y -i \""
           . $basename . ".mpg"
           . "\" -acodec copy -vn \""
-          . $basename
-          . ".$task" . "\"";
+          . $basename . "."
+          . $task . "\"";
     } elsif ( $task =~ m/^m2v$/ ) {
         $cmd =
-            " ffmpeg -y -i \""
+            getcmd("ffmpeg")
+          . " -y -i \""
           . $basename . ".mpg"
           . "\" -vcodec copy -an \""
-          . $basename
-          . ".$task" . "\"";
+          . $basename . "."
+          . $task . "\"";
     } elsif ( $task =~ m/^wav$/ ) {
         $cmd =
-            " mplayer -noautosub -nolirc -benchmark "
+            getcmd("mplayer")
+          . " -noautosub -nolirc -benchmark "
           . "-vc null -vo null "
           . "-ao pcm:waveheader:fast:file=\""
+          . $basename . "."
+          . $task . "\" \""
           . $basename
-          . ".$task" . "\" \""
-          . $basename . ".ac3" . "\"";
+          . ".ac3\"";
     } elsif ( $task =~ m/^pcm$/ ) {
         $cmd =
             "if [ ! -f \""
-          . $basename
-          . ".$task"
+          . $basename . "."
+          . $task
           . "\" ]; then "
-          . " cp -a \""
-          . $basename . ".wav" . "\" \""
+          . getcmd("cp")
+          . " -a \""
           . $basename
-          . ".$task" . "\"" . "; fi "
-          . " && normalize --no-progress -n \""
-          . $basename
-          . ".$task"
-          . "\"  2>&1 | "
-          . "grep ' has zero power, ignoring...' ; "
+          . ".wav\" \""
+          . $basename . "."
+          . $task
+          . "\"; fi && "
+          . getcmd("normalize")
+          . " --no-progress -n \""
+          . $basename . "."
+          . $task
+          . "\" 2>&1 | "
+          . getcmd("grep")
+          . " ' has zero power, ignoring...' ; "
           . "if [ \$? -eq 0 ]; "
           . "then echo \"skipping file "
-          . $basename
-          . ".$task" . "\"; "
+          . $basename . "."
+          . $task . "\"; "
           . "else echo \"normalizing file "
-          . $basename
-          . ".$task"
+          . $basename . "."
+          . $task
           . "\" && "
-          . "normalize -m \""
-          . $basename
-          . ".$task" . "\" ; " . "fi";
+          . getcmd("normalize")
+          . " -m \""
+          . $basename . "."
+          . $task
+          . "\" ; fi";
     } elsif ( $task =~ m/^mpa$/ ) {
         $cmd =
-            " ffmpeg -y -i \""
+            getcmd("ffmpeg")
+          . " -y -i \""
           . $basename . ".pcm"
           . "\" -f ac3 -vn \""
-          . $basename
-          . ".$task" . "\"";
+          . $basename . "."
+          . $task . "\"";
     } elsif ( $task =~ m/^mplex\.mpg$/ ) {
         $cmd =
-            " mplex -f 8 -o \""
+            getcmd("mplex")
+          . " -f 8 -o \""
+          . $basename . "."
+          . $task . "\" \""
           . $basename
-          . ".$task\" \""
-          . $basename . ".m2v" . "\" \""
-          . $basename . ".mpa" . "\"";
+          . ".m2v\" \""
+          . $basename
+          . ".mpa\"";
     } elsif ( $task =~ m/^dvda$/ ) {
         $cmd =
             "if [ -d \""
           . $basename . "."
           . $task
-          . "\" ]; then rm -r "
+          . "\" ]; then "
+          . getcmd("rm") . " -r "
           . $basename . "."
           . $task
-          . "; fi && mkdir "
+          . "; fi && "
+          . getcmd("mkdir") . " "
           . $basename . "."
           . $task . " && "
-          . "dvdauthor -x \""
+          . getcmd("dvdauthor")
+          . " -x \""
           . $basename
           . "\" -o "
           . $basename . "."
@@ -224,16 +247,20 @@ sub convert {
             "if [ -f \""
           . $basename . "."
           . $task
-          . "\" ]; then rm "
+          . "\" ]; then "
+          . getcmd("rm") . " "
           . $basename . "."
           . $task
-          . "; fi && " . "find "
+          . "; fi && "
+          . getcmd("find") . " "
           . $basename
-          . " -exec touch"
+          . " -exec "
+          . getcmd("touch")
           . " -a -m -r \""
           . $tempdir
           . "\" {} \\\; && "
-          . "genisoimage -quiet -dvd-video -o "
+          . getcmd("genisoimage")
+          . " -quiet -dvd-video -o "
           . $basename . "."
           . $task . " "
           . $basename;
@@ -274,7 +301,7 @@ sub runcmd {
     my (@cmd) = @_;
     my ( $in, $out, $err );
 
-    $logger->info( "Running command: " . Dumper(@cmd) );
+    $logger->info( "Running command: " . $cmd[0] );
     run3( @cmd, \$in, \$out, \$err );
     my $result = $?;
     if ($out) {
@@ -336,21 +363,25 @@ if ( validurl($opturl) ) {
     }
 } ## end if ( validurl($opturl))
 
-my @extcmds = (
-    "youtube-dl", "ffprobe", "grep", "ffmpeg", "mplayer", "cp", "normalize",
-    "mplex", "rm", "mkdir", "dvdauthor", "find", "touch", "genisoimage"
-);
-foreach my $extcmd (@extcmds) {
-    getcmd($extcmd);
-}
-
+$logger->trace("Creating temporary directory");
 our $tempdir = tempdir( DIR => "." );
 
-$logger->debug( "Temporary directory: " . $tempdir );
+$logger->debug( "Created temporary directory \"" . $tempdir . "\"" );
 
 my $ytdlcmd =
     getcmd("youtube-dl")
-  . " -f webm/mp4 --prefer-free-formats --write-description --write-info-json --write-annotations --write-thumbnail --write-all-thumbnails -o \'"
+  . " -f webm/mp4 --prefer-free-formats "
+  . "--write-description --write-info-json --write-annotations "
+  . "--write-thumbnail --write-all-thumbnails";
+if ($optquiet) {
+    $ytdlcmd = $ytdlcmd . " --quiet";
+}
+if ( $optverbose || $optdebug ) {
+    $ytdlcmd = $ytdlcmd . " --verbose";
+}
+$ytdlcmd =
+    $ytdlcmd
+  . " -o \'"
   . $tempdir
   . "/\%(playlist_index)s - \%(title)s.\%(ext)s\' \""
   . $opturl . "\"";
@@ -389,7 +420,8 @@ foreach ( sort(@jsonfiles) ) {
     $logger->trace( Dumper $data );
     my $_filename = jpath1( $data, '$._filename' );
     $logger->trace( Dumper $_filename );
-    runcmd( "cp -a \"" . $_filename . "\" \"" . $newfilename . "\"" );
+    runcmd(
+        getcmd("cp") . " -a \"" . $_filename . "\" \"" . $newfilename . "\"" );
     $logger->trace( Dumper $newfilename );
     my $jpgfile = $basename . ".jpg";
     $logger->trace( Dumper $jpgfile );
