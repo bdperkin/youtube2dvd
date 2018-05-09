@@ -126,11 +126,10 @@ sub convert {
           . $basename
           . "\" 2>&1 | grep '^    Stream #' |"
           . " grep ': Audio: ' > /dev/null";
-        $logger->error_warn(
-            "Checking for audio stream in $basename with: \"$cmd\"");
+        $logger->trace("Checking for audio stream in $basename with: \"$cmd\"");
         my $rc = system($cmd);
         if ($rc) {
-            warn(   "$basename does not have an audio track,"
+            $logger->error_warn( "$basename does not have an audio track,"
                   . " setting it to have one..." );
             $nullaudio = " -f lavfi -i aevalsrc=0 -shortest"
               . " -c:v copy -c:a aac -strict experimental ";
@@ -228,8 +227,7 @@ sub convert {
           . "\" ]; then rm "
           . $basename . "."
           . $task
-          . "; fi && "
-          . "find "
+          . "; fi && " . "find "
           . $basename
           . " -exec touch"
           . " -a -m -r \""
@@ -325,17 +323,18 @@ unless ($opturl) {
 
 if ( validurl($opturl) ) {
     if ( $opturl =~ /\A(.*)\z/s ) {
-	$opturl = $1;
-	$logger->trace( "URL \"" . $opturl . "\" is not tainted" );
+        $opturl = $1;
+        $logger->trace( "URL \"" . $opturl . "\" is not tainted" );
     } else {
-	$logger->error_die( "URL \"" . $opturl . "\" is tainted: $!" );
+        $logger->error_die( "URL \"" . $opturl . "\" is tainted: $!" );
     }
     if ( $opturl =~ m/^http(s)?:\/\/(www\.)?youtube\.com\// ) {
-	$logger->debug("Using URL \"" . $opturl . "\"" );
+        $logger->debug( "Using URL \"" . $opturl . "\"" );
     } else {
-	$logger->error_die("\"" . $opturl . "\" is not a valid youtube URL: $!");
+        $logger->error_die(
+            "\"" . $opturl . "\" is not a valid youtube URL: $!" );
     }
-}
+} ## end if ( validurl($opturl))
 
 my @extcmds = (
     "youtube-dl", "ffprobe", "grep", "ffmpeg", "mplayer", "cp", "normalize",
@@ -345,7 +344,7 @@ foreach my $extcmd (@extcmds) {
     getcmd($extcmd);
 }
 
-my $tempdir = tempdir( DIR => "." );
+our $tempdir = tempdir( DIR => "." );
 
 $logger->debug( "Temporary directory: " . $tempdir );
 
@@ -489,5 +488,7 @@ close(DVDAXML);
 
 convert( $dvdaxml,  "dvda" );
 convert( $dvdaxmld, "iso" );
+
+print "ISO: " . $dvdaxmld . ".iso\n";
 
 1;
